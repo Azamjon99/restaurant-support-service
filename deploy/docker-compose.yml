@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5436:5432"
+    restart: always\
+    networks:
+      - mynet
+    volumes:
+      - postgres_data:/val/lib/postgresl
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  restaurant-support-migration:
+    image: migrate/migrate
+    container_name: restaurant-support-migration
+    restart: "no"
+    networks:
+      - mynet
+    volumes:
+      - ../src/infrastructure/migrations:/migrations
+    command:
+      [
+        "-path=/migrations/",
+        "-database",
+        "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable",
+        "up",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  restaurant-support-svc:
+    image: restaurant-support-svc
+    container_name: restaurant-support-svc
+    environment:
+      - LOG_LEVEL=debug
+      - HTTP_PORT=:50000
+      - GRPC_PORT=:5050
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_DATABASE=postgres
+      - SMS_PROVIDER_API_KEY=12345
+      - JWT_SECRET=secret-key
+      - JWT_EXPIRES_IN_SEC=86400
+    depends_on:
+      - restaurant-support-migration
+    ports:
+      - "50000:50000"
+      - "5050:5050"
+    restart: always
+    networks:
+      - mynet
+    volumes:
+      - ${PWD}/data:/data
+networks:
+  mynet:
+    external: true
+volumes:
+  postgres_data:
+    driver: local
